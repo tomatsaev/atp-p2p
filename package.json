@@ -15,5 +15,11 @@
   "bugs": {
     "url": "https://github.com/tomatsaev/atp-p2p/issues"
   },
-  "homepage": "https://github.com/tomatsaev/atp-p2p#readme"
+  "homepage": "https://github.com/tomatsaev/atp-p2p#readme",
+  "devDependencies": {
+    "typescript": "^4.5.4"
+  },
+  "dependencies": {
+    "ts-node": "^10.4.0"
+  }
 }
