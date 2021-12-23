@@ -21,7 +21,7 @@ function doConvert(file) {
                 array.push(line);
         });
 
-            reader.on('close', () => resolve(array));
+        reader.on('close', () => resolve(array));
     });
 }
 async function convert(filename) {
