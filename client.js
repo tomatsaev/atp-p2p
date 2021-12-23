@@ -53,10 +53,13 @@ function connectTo(clients) {
 
 function connect(port, ip) {
     const socket = new net.Socket();
-    setTimeout(() => connectSocket(socket, port, ip), 5000);
+    setTimeout(() => connectSocket(socket, port, ip).then(() => {
+            socket.on('connect', () => connectEventHandler(port));
+            sockets.push(socket);
+        }
+    ), 5000);
+
     // socket.on("error", ()=> reconnectSocket(socket, port, ip));
-    socket.on('connect', () => connectEventHandler(port));
-    sockets.push(socket);
 }
 
 const connectEventHandler = (port) => {
@@ -64,16 +67,25 @@ const connectEventHandler = (port) => {
     console.log(`Client id ${ID} connected to client on port ${port}`);
 }
 
-const reconnectSocket = (socket, port, ip) => {
-    if (!retrying) {
-        retrying = true;
-        console.log('Reconnecting...');
-    }
-    setTimeout(() => connectSocket(socket, port, ip), 5000);
+// const reconnectSocket = (socket, port, ip) => {
+//     if (!retrying) {
+//         retrying = true;
+//         console.log('Reconnecting...');
+//     }
+//     setTimeout(() => connectSocket(socket, port, ip), 5000);
+// }
+
+async function connectSocket(socket, port, ip) {
+    return new Promise((res, rej) => {
+        socket.connect(port, ip, () => {
+            socket.write("Hello from client " + ID)
+            res(socket)
+            }
+        );
+        socket.on('error', err => rej(err));
+    });
 }
 
-function connectSocket(socket, port, ip) {
-    socket.connect(port, ip, () => {
-        socket.write("Hello from client " + ID);
-    })
+function timeout(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
