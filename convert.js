@@ -45,11 +45,11 @@ async function convert(filename) {
                 });
             }
             // parse actions info
-            client_data.actions = []
+            client_data.operations = []
             for(let i = second + 1; i < third; i++){
                 const data = res[i].split(' ');
                 const [head, ...rest] = data;
-                client_data.actions.push({
+                client_data.operations.push({
                     name: head,
                     elements: rest
                 });

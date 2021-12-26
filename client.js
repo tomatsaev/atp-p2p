@@ -22,8 +22,56 @@ start()
             IP = "127.0.0.1"
             startServer()
             connectTo(client_data.other_clients)
+            mainLoop()
         }
     );
+
+async function mainLoop(){
+    // TODO: Promise.all.then => Goodbye
+    const operations = client_data.operations
+
+    await Promise.all(operations.map(((operation) =>
+            doAndSend(operation)
+    )))
+
+    sockets.forEach(socket => endSession(socket))
+
+    // const returnedOps = operations.map(op => doAndSend(op))
+
+    // operations.forEach((operation) =>  {
+    //     doAndSend(operation);
+    //     // console.log(returnedOp);
+    // })
+    //
+    // for await (const returned of operations.map(operation => doAndSend(operation))) {
+    //     console.log(returned)
+    // }
+
+}
+
+async function doAndSend(operation){
+    await sleep(1000)
+    const message = await handleOperation(operation.name, operation.elements)
+    sendUpdate(message)
+    return operation
+}
+
+async function handleOperation(name, elements){
+    if(name === "delete"){
+        // TODO
+    }
+    return "blabla";
+}
+
+function sendUpdate(message){
+    sockets.forEach(socket => {
+        socket.write(message);
+    })
+}
+
+function handleMessage(buffer){
+
+}
 
 function startServer() {
     net.createServer()
@@ -33,7 +81,7 @@ function startServer() {
                 socket.on('data', buffer => {
                     console.log(`Client id ${ID} Received connection`);
                     console.log(buffer.toString());
-                    // makeTask(buffer)
+                    handleMessage(buffer)
                 })
             }
         )
@@ -61,6 +109,11 @@ function connect(port, ip) {
 const connectEventHandler = (socket, port) => {
     sockets.push(socket);
     console.log(`Client id ${ID} connected to client on port ${port}`);
+    socket.on('data', buffer => {
+        console.log(`Client id ${ID} Received connection`);
+        console.log(buffer.toString());
+        handleMessage(buffer)
+    })
 }
 
 const reconnectSocket = (socket, port, ip) => {
@@ -76,3 +129,8 @@ function connectSocket(socket, port, ip) {
         socket.write("Hello from client " + ID);
     })
 }
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
