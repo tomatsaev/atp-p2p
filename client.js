@@ -55,12 +55,11 @@ function connect(port, ip) {
     const socket = new net.Socket();
     setTimeout(() => connectSocket(socket, port, ip), 5000);
     // socket.on("error", ()=> reconnectSocket(socket, port, ip));
-    socket.on('connect', () => connectEventHandler(port));
-    sockets.push(socket);
+    socket.on('connect', () => connectEventHandler(socket, port));
 }
 
-const connectEventHandler = (port) => {
-    retrying = false;
+const connectEventHandler = (socket, port) => {
+    sockets.push(socket);
     console.log(`Client id ${ID} connected to client on port ${port}`);
 }
 
