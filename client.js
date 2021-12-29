@@ -5,6 +5,22 @@ let client_data = {}
 let ID, PORT, IP;
 let sockets = []
 let retrying = false;
+let myTimeStamp = 0;
+
+// let tuple = {
+//     id: 0,
+//     timeStamp: 0,
+//     op: 0
+// }
+
+let tuples = []
+// [
+//     {
+//         tuple,
+//         String
+//     }
+// ]
+
 
 async function start() {
     const parsed = convert(process.argv[2])
