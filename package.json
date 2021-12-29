@@ -15,5 +15,8 @@
   "bugs": {
     "url": "https://github.com/tomatsaev/atp-p2p/issues"
   },
-  "homepage": "https://github.com/tomatsaev/atp-p2p#readme"
+  "homepage": "https://github.com/tomatsaev/atp-p2p#readme",
+  "dependencies": {
+    "why-is-node-running": "^2.2.0"
+  }
 }

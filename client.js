@@ -1,25 +1,17 @@
+const log = require('why-is-node-running') // should be your first require
 const {convert} = require("./convert");
+
 const net = require("net");
+const {handleInsert, handleDelete} = require("./str");
 
 let client_data = {}
-let ID, PORT, IP;
+let ID, PORT, IP, server;
 let sockets = []
+let my_TS = 0;
 let retrying = false;
-let myTimeStamp = 0;
-
-// let tuple = {
-//     id: 0,
-//     timeStamp: 0,
-//     op: 0
-// }
-
-let tuples = []
-// [
-//     {
-//         tuple,
-//         String
-//     }
-// ]
+let sentAll = false;
+let goodbyes = 0;
+let operation_history = []
 
 
 async function start() {
@@ -31,14 +23,27 @@ async function start() {
 }
 
 start()
-    .then(() => {
-            // console.log(client_data);
+    .then(async () => {
             ID = client_data.id;
             PORT = client_data.port;
             IP = "127.0.0.1"
-            startServer()
-            connectTo(client_data.other_clients)
-            mainLoop()
+            let init_data = {
+                id: ID,
+                TS: 0,
+                op: null
+            }
+            operation_history.push({
+                operation_data: init_data,
+                string: client_data.replica
+            })
+            server = startServer();
+            connectTo(client_data.other_clients, ID, sockets)
+            // mainLoop()
+            await sleep(10000);
+            // server.close(()=>  console.log("After close"));
+            // setTimeout(function () {
+            //     log() // logs out active handles that are keeping node running
+            // }, 100)
         }
     );
 
@@ -59,9 +64,6 @@ async function mainLoop(){
     //     // console.log(returnedOp);
     // })
     //
-    // for await (const returned of operations.map(operation => doAndSend(operation))) {
-    //     console.log(returned)
-    // }
 
 }
 
@@ -72,11 +74,22 @@ async function doAndSend(operation){
     return operation
 }
 
-async function handleOperation(name, elements){
-    if(name === "delete"){
-        // TODO
+async function handleOperation(name, elements, string){
+    if(name === "delete")
+        string = handleDelete(string, elements[0])
+    else
+        string = handleInsert(string, elements)
+
+    const data = {
+        id: ID,
+        TS: my_TS,
+        op: name
     }
-    return "blabla";
+    operation_history.push({
+        data,
+        string
+    })
+    return data;
 }
 
 function sendUpdate(message){
@@ -85,22 +98,48 @@ function sendUpdate(message){
     })
 }
 
-function handleMessage(buffer){
+async function handleMessage(buffer){
+    if (buffer.op === "Goodbye"){
+        goodbyes++;
+        if (goodbyes === client_data.other_clients.length && sentAll){
+            closeConnection()
+        }
+    }
+    else{
+        //TODO
+    }
 
 }
 
+async function endSession(){
+    sendUpdate({
+        id: ID,
+        op: "Goodbye"
+    })
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+
+///////////// CONNECTION
+
 function startServer() {
-    net.createServer()
+    return net.createServer()
         .listen(PORT, IP, 100)
         .on('connection', socket => {
-                sockets.push(socket);
-                socket.on('data', buffer => {
-                    console.log(`Client id ${ID} Received connection`);
-                    console.log(buffer.toString());
-                    handleMessage(buffer)
-                })
-            }
-        )
+            console.log(`Client id ${ID} received connection`);
+            sockets.push(socket);
+            socket.write(`Hello from server ${ID}`)
+            socket.on('data', buffer => {
+                console.log(buffer.toString());
+                // handleMessage(buffer)
+            })
+            socket.on('end', function() {
+                console.log('socket closing...')
+            })
+        })
 }
 
 function connectTo(clients) {
@@ -120,15 +159,19 @@ function connect(port, ip) {
     setTimeout(() => connectSocket(socket, port, ip), 5000);
     // socket.on("error", ()=> reconnectSocket(socket, port, ip));
     socket.on('connect', () => connectEventHandler(socket, port));
+    socket.on('end', function() {
+        console.log('socket closing...')
+    })
 }
 
 const connectEventHandler = (socket, port) => {
     sockets.push(socket);
     console.log(`Client id ${ID} connected to client on port ${port}`);
     socket.on('data', buffer => {
-        console.log(`Client id ${ID} Received connection`);
+        console.log(`Client id ${ID} received message`);
         console.log(buffer.toString());
-        handleMessage(buffer)
+        // handleMessage(buffer)
+        // socket.end();
     })
 }
 
@@ -146,7 +189,7 @@ function connectSocket(socket, port, ip) {
     })
 }
 
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+function closeConnection(){
+    server.close()
+    sockets.forEach(socket => socket.end())
 }
-
