@@ -14,7 +14,7 @@ let goodbyes = 0;
 let operation_history = []
 
 
-async function start() {
+const start = async () => {
     const parsed = convert(process.argv[2])
         .then(res => {
             client_data = res
@@ -47,7 +47,7 @@ start()
         }
     );
 
-async function mainLoop(){
+const mainLoop = async () => {
     // TODO: Promise.all.then => Goodbye
     const operations = client_data.operations
 
@@ -67,15 +67,18 @@ async function mainLoop(){
 
 }
 
-async function doAndSend(operation){
+const doAndSend = async (operation) => {
     await sleep(1000)
-    const message = await handleOperation(operation.name, operation.elements)
-    sendUpdate(message)
+    let string = getRelevantReplica(operation)
+    const message = await handleOperation(operation.name, operation.elements, string)
+
+    operation_history.push(message)
+    sendUpdate(message.data)
     return operation
 }
 
-async function handleOperation(name, elements, string){
-    if(name === "delete")
+const handleOperation = async (name, elements, string) => {
+    if (name === "delete")
         string = handleDelete(string, elements[0])
     else
         string = handleInsert(string, elements)
@@ -85,33 +88,75 @@ async function handleOperation(name, elements, string){
         TS: my_TS,
         op: name
     }
-    operation_history.push({
+    const tuple = {
         data,
         string
-    })
-    return data;
+    }
+    return tuple;
 }
 
-function sendUpdate(message){
+const sendUpdate = (message) => {
     sockets.forEach(socket => {
         socket.write(message);
     })
 }
 
-async function handleMessage(buffer){
-    if (buffer.op === "Goodbye"){
+const handleMessage = async (buffer) => {
+    if (buffer.op === "Goodbye") {
         goodbyes++;
-        if (goodbyes === client_data.other_clients.length && sentAll){
+        if (goodbyes => client_data.other_clients.length && sentAll) {
             closeConnection()
         }
-    }
-    else{
-        //TODO
+    } else {
+        const replica = getRelevantReplica(buffer);
+        const tuple = handleOperation(buffer.name, buffer.elements, replica)
+        operation_history.push(tuple)
     }
 
 }
 
-async function endSession(){
+const getRelevantReplica = async (operation) => {
+    const TS = operation.TS;
+    let returned;
+    if(my_TS < TS){
+        my_TS = TS;
+        return operation_history[operation_history.length - 1].string
+    }
+    else if(my_TS === TS){
+        if(operation.id > ID){
+            return operation_history[operation_history.length - 1].string
+        }
+        else{
+            const prevOp = operation_history.pop();
+            let prevString = operation_history[operation_history.length - 1].string
+            const tuple = await handleOperation(operation.name, operation.elements, prevString)
+            operation_history.push(tuple)
+            const tuple1 = await handleOperation(prevOp.name, prevOp.elements)
+
+            // TODO
+        }
+    }
+    else {
+        const prevOp = operation_history.pop();
+        const newString = getRelevantReplica(operation);
+        const tuple = await handleOperation(prevOp.name, prevOp.elements, newString)
+        operation_history.push(tuple)
+        return tuple.string
+        // for (let i = 1; i < operation_history.length; i++) {
+        //     curr = operation_history[operation_history.length - 1]
+        //     if (curr.TS >= my_TS)
+        //         return curr.string;
+        //     else {
+        //         operation_history.pop()
+        //     }
+        // }
+    }
+}
+const applyBeforeNumOps = (operation, count) => {
+
+}
+
+const endSession = async () => {
     sendUpdate({
         id: ID,
         op: "Goodbye"
@@ -123,9 +168,9 @@ function sleep(ms) {
 }
 
 
-///////////// CONNECTION
+///////////// CONNECTION //////////////
 
-function startServer() {
+const startServer = () => {
     return net.createServer()
         .listen(PORT, IP, 100)
         .on('connection', socket => {
@@ -136,13 +181,13 @@ function startServer() {
                 console.log(buffer.toString());
                 // handleMessage(buffer)
             })
-            socket.on('end', function() {
+            socket.on('end', function () {
                 console.log('socket closing...')
             })
         })
 }
 
-function connectTo(clients) {
+const connectTo = (clients) => {
     clients.forEach(client => {
         if (client.id < ID)
             return;
@@ -154,12 +199,12 @@ function connectTo(clients) {
 }
 
 
-function connect(port, ip) {
+const connect = (port, ip) => {
     const socket = new net.Socket();
     setTimeout(() => connectSocket(socket, port, ip), 5000);
     // socket.on("error", ()=> reconnectSocket(socket, port, ip));
     socket.on('connect', () => connectEventHandler(socket, port));
-    socket.on('end', function() {
+    socket.on('end', function () {
         console.log('socket closing...')
     })
 }
@@ -183,13 +228,13 @@ const reconnectSocket = (socket, port, ip) => {
     setTimeout(() => connectSocket(socket, port, ip), 5000);
 }
 
-function connectSocket(socket, port, ip) {
+const connectSocket = (socket, port, ip) => {
     socket.connect(port, ip, () => {
         socket.write("Hello from client " + ID);
     })
 }
 
-function closeConnection(){
+const closeConnection = () => {
     server.close()
     sockets.forEach(socket => socket.end())
 }

@@ -2,7 +2,7 @@
 const fs = require('fs');
 const readline = require('readline');
 
-function doConvert(file) {
+const doConvert = (file) => {
     return new Promise((resolve, reject) => {
         const stream = fs.createReadStream(file);
         // Handle stream error (IE: file not found)
@@ -24,7 +24,7 @@ function doConvert(file) {
         reader.on('close', () => resolve(array));
     });
 }
-async function convert(filename) {
+const convert = async (filename) => {
     return doConvert(filename)
         .then(res => {
             const client_data = {};
