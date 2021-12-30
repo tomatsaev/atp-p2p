@@ -33,8 +33,8 @@ start()
                 op: null
             }
             operation_history.push({
-                operation_data: init_data,
-                string: client_data.replica
+                data: init_data,
+                replica: client_data.replica
             })
             server = startServer();
             connectTo(client_data.other_clients, ID, sockets)
@@ -51,11 +51,13 @@ const mainLoop = async () => {
     // TODO: Promise.all.then => Goodbye
     const operations = client_data.operations
 
-    await Promise.all(operations.map(((operation) =>
+    await Promise.all(operations.map(((operation) => {
             doAndSend(operation)
+            console.log("sent an op");
+        }
     )))
 
-    sockets.forEach(socket => endSession(socket))
+    // sockets.forEach(socket => endSession(socket))
 
     // const returnedOps = operations.map(op => doAndSend(op))
 
@@ -69,91 +71,129 @@ const mainLoop = async () => {
 
 const doAndSend = async (operation) => {
     await sleep(1000)
-    let string = getRelevantReplica(operation)
-    const message = await handleOperation(operation.name, operation.elements, string)
-
-    operation_history.push(message)
-    sendUpdate(message.data)
-    return operation
+    const my_TS = operation_history[operation_history.length - 1].data.TS;
+    const tuple = applyAndPush(ID, my_TS + 1, operation);
+    // const data = {
+    //     id: ID,
+    //     TS: my_TS + 1,
+    //     op: operation
+    // }
+    // // const message = await handleOperation(operation.name, operation.elements, string)
+    // // applyOnLastString(operation)
+    // const replica = applyOnLastString(operation)
+    // const tuple = {
+    //     data: data,
+    //     replica: replica
+    // }
+    // operation_history.push(tuple)
+    sendUpdate(tuple.data)
+    // return operation
 }
 
-const handleOperation = async (name, elements, string) => {
+const handleOperation = (name, elements, replica) => {
     if (name === "delete")
-        string = handleDelete(string, elements[0])
-    else
-        string = handleInsert(string, elements)
+        return handleDelete(replica, elements[0])
+    else{
+        console.log(name);
+        return handleInsert(replica, elements)
+    }
 
-    const data = {
-        id: ID,
-        TS: my_TS,
-        op: name
-    }
-    const tuple = {
-        data,
-        string
-    }
-    return tuple;
+
+    // const my_TS = operation_history[operation_history.length - 1].data.TS + 1;
+    //
+    // const data = {
+    //     id: ID,
+    //     TS: my_TS,
+    //     op: {
+    //         name: name,
+    //         elements: elements
+    //     }
+    // }
+    // const tuple = {
+    //     data: data,
+    //     string: string
+    // }
+    // return tuple;
 }
 
 const sendUpdate = (message) => {
     sockets.forEach(socket => {
-        socket.write(message);
+        socket.write(JSON.stringify(message));
     })
 }
 
-const handleMessage = async (buffer) => {
-    if (buffer.op === "Goodbye") {
-        goodbyes++;
-        if (goodbyes => client_data.other_clients.length && sentAll) {
-            closeConnection()
-        }
-    } else {
-        const replica = getRelevantReplica(buffer);
-        const tuple = handleOperation(buffer.name, buffer.elements, replica)
-        operation_history.push(tuple)
-    }
+const handleMessage = (buffer) => {
+    const message = JSON.parse(buffer);
+    // if (message.op === "Goodbye") {
+    //     goodbyes++;
+    //     if ((goodbyes === client_data.other_clients.length) && sentAll) {
+    //         closeConnection()
+    //     }
+    // } else
+    // {
+        applyOperation(message);
+        console.log("\nOperation history: ");
+        console.log(operation_history);
+        console.log("\n");
 
+    // }
 }
 
-const getRelevantReplica = async (operation) => {
-    const TS = operation.TS;
-    let returned;
-    if(my_TS < TS){
-        my_TS = TS;
-        return operation_history[operation_history.length - 1].string
-    }
-    else if(my_TS === TS){
-        if(operation.id > ID){
-            return operation_history[operation_history.length - 1].string
-        }
-        else{
-            const prevOp = operation_history.pop();
-            let prevString = operation_history[operation_history.length - 1].string
-            const tuple = await handleOperation(operation.name, operation.elements, prevString)
-            operation_history.push(tuple)
-            const tuple1 = await handleOperation(prevOp.name, prevOp.elements)
+const applyOnLastString = (operation) => {
+    let prevString = operation_history[operation_history.length - 1].replica
+    console.log(operation);
+    return handleOperation(operation.name, operation.elements, prevString)
+    // const tuple = handleOperation(operation.name, operation.elements, prevString)
+    // operation_history.push(tuple)
+    // return tuple.string;
+}
 
-            // TODO
+function applyAndPush(id, ts, operation) {
+    const data = {
+        id: id,
+        TS: ts,
+        op: operation
+    }
+    const replica = applyOnLastString(operation)
+    const tuple = {
+        data: data,
+        replica: replica
+    }
+    operation_history.push(tuple)
+    return tuple;
+}
+
+// operation {}
+const applyOperation = (data) => {
+    const op_TS = data.TS;
+    const my_TS = operation_history[operation_history.length - 1].data.TS;
+    if (my_TS < op_TS) {
+        return applyAndPush(data.id, op_TS, data.op);
+    } else if (my_TS === op_TS) {
+        if (data.id > ID) {
+            return applyAndPush(data.id, op_TS, data.op);
+        } else {
+            const lastOp = operation_history.pop();
+            applyAndPush(data.id, op_TS, data.op);
+            return applyAndPush(lastOp.id, lastOp.data.TS, lastOp.data.op);
+            // await applyOnLastString(operation)
+            // return applyOnLastString(lastOp)
+            // let prevString = operation_history[operation_history.length - 1].string
+            // const tuple = await handleOperation(operation.name, operation.elements, prevString)
+            // operation_history.push(tuple)
+            // const tuple1 = await handleOperation(lastOp.name, lastOp.elements, tuple.string)
+            // operation_history.push(tuple1)
         }
     }
     else {
         const prevOp = operation_history.pop();
-        const newString = getRelevantReplica(operation);
-        const tuple = await handleOperation(prevOp.name, prevOp.elements, newString)
-        operation_history.push(tuple)
-        return tuple.string
-        // for (let i = 1; i < operation_history.length; i++) {
-        //     curr = operation_history[operation_history.length - 1]
-        //     if (curr.TS >= my_TS)
-        //         return curr.string;
-        //     else {
-        //         operation_history.pop()
-        //     }
-        // }
-    }
-}
-const applyBeforeNumOps = (operation, count) => {
+        applyOperation(data);
+        return applyAndPush(prevOp.id, prevOp.data.TS, prevOp.data.op);
+        // const tuple = await handleOperation(prevOp.name, prevOp.elements, newString)
+        // operation_history.push(tuple)
+        // return tuple.string
 
+    }
 }
 
 const endSession = async () => {
@@ -174,10 +214,10 @@ const startServer = () => {
     return net.createServer()
         .listen(PORT, IP, 100)
         .on('connection', socket => {
-            console.log(`Client id ${ID} received connection`);
+            console.log(`Server id: ${ID} received connection`);
             sockets.push(socket);
-            socket.write(`Hello from server ${ID}`)
-            socket.on('data', buffer => {
+            // socket.write(`Hello from server id: ${ID}`)
+            socket.on('data',  (buffer) => {
                 console.log(buffer.toString());
                 // handleMessage(buffer)
             })
@@ -212,10 +252,11 @@ const connect = (port, ip) => {
 const connectEventHandler = (socket, port) => {
     sockets.push(socket);
     console.log(`Client id ${ID} connected to client on port ${port}`);
-    socket.on('data', buffer => {
+    socket.on('data', (buffer) => {
         console.log(`Client id ${ID} received message`);
         console.log(buffer.toString());
-        // handleMessage(buffer)
+        handleMessage(buffer);
+        console.log(`Handled message from client id: ${buffer.id}`);
         // socket.end();
     })
 }
@@ -230,7 +271,7 @@ const reconnectSocket = (socket, port, ip) => {
 
 const connectSocket = (socket, port, ip) => {
     socket.connect(port, ip, () => {
-        socket.write("Hello from client " + ID);
+        // socket.write("Hello from client " + ID);
     })
 }
 
