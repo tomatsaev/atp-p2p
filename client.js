@@ -1,5 +1,6 @@
-const log = require('why-is-node-running') // should be your first require
+const log = require('why-is-node-running')
 const {convert} = require("./convert");
+const split = require('split');
 
 const net = require("net");
 const {handleInsert, handleDelete} = require("./str");
@@ -47,26 +48,25 @@ start()
         }
     );
 
+function closeIfEnded() {
+    if ((goodbyes >= client_data.other_clients.length) && sentAll) {
+        console.log("Closing connections");
+        closeConnection()
+    }
+}
+
 const mainLoop = async () => {
     // TODO: Promise.all.then => Goodbye
     const operations = client_data.operations
-
     await Promise.all(operations.map(((operation) => {
             doAndSend(operation)
             console.log("sent an op");
         }
     )))
-
-    // sockets.forEach(socket => endSession(socket))
-
-    // const returnedOps = operations.map(op => doAndSend(op))
-
-    // operations.forEach((operation) =>  {
-    //     doAndSend(operation);
-    //     // console.log(returnedOp);
-    // })
-    //
-
+    console.log(operation_history);
+    sentAll = true;
+    await endSession();
+    closeIfEnded();
 }
 
 const doAndSend = async (operation) => {
@@ -87,6 +87,7 @@ const doAndSend = async (operation) => {
     // }
     // operation_history.push(tuple)
     sendUpdate(tuple.data)
+    console.log(operation_history);
     // return operation
 }
 
@@ -118,25 +119,25 @@ const handleOperation = (name, elements, replica) => {
 
 const sendUpdate = (message) => {
     sockets.forEach(socket => {
-        socket.write(JSON.stringify(message));
+        // console.log("Sending: " + JSON.stringify(message));
+        socket.write(JSON.stringify(message) + '\n');
     })
 }
 
-const handleMessage = (buffer) => {
-    const message = JSON.parse(buffer);
-    // if (message.op === "Goodbye") {
-    //     goodbyes++;
-    //     if ((goodbyes === client_data.other_clients.length) && sentAll) {
-    //         closeConnection()
-    //     }
-    // } else
-    // {
+const handleMessage = (message) => {
+    // const message = JSON.parse(buffer);
+    if (message.op === "Goodbye") {
+        goodbyes++;
+        console.log("Received goodbye, total: " + goodbyes);
+        console.log("Need to receive " + client_data.other_clients.length);
+        closeIfEnded()
+    } else
+    {
         applyOperation(message);
         console.log("\nOperation history: ");
         console.log(operation_history);
         console.log("\n");
-
-    // }
+    }
 }
 
 const applyOnLastString = (operation) => {
@@ -197,6 +198,7 @@ const applyOperation = (data) => {
 }
 
 const endSession = async () => {
+    await sleep(1000);
     sendUpdate({
         id: ID,
         op: "Goodbye"
@@ -215,11 +217,24 @@ const startServer = () => {
         .listen(PORT, IP, 100)
         .on('connection', socket => {
             console.log(`Server id: ${ID} received connection`);
+            socket.setEncoding('utf8');
             sockets.push(socket);
+            const stream = socket.pipe(split());
             // socket.write(`Hello from server id: ${ID}`)
-            socket.on('data',  (buffer) => {
-                console.log(buffer.toString());
-                // handleMessage(buffer)
+            stream.on('data',  (buffer) => {
+                const unTrimmedBuffer = buffer.toString('utf8')
+                console.log("untrimmed: ");
+                console.log(unTrimmedBuffer);
+                const trimmedBuffer = unTrimmedBuffer.trim()
+                if (trimmedBuffer) {
+                    const message = JSON.parse(trimmedBuffer)
+                    console.log(`Server id: ${ID} received messagefrom client id ${message.id}:`);
+                    console.log(message);
+                    console.log();
+                    handleMessage(message)
+                    console.log(`Handled message from client id: ${message.id}`);
+                    console.log();
+                }
             })
             socket.on('end', function () {
                 console.log('socket closing...')
@@ -250,13 +265,27 @@ const connect = (port, ip) => {
 }
 
 const connectEventHandler = (socket, port) => {
+    socket.setEncoding('utf8');
     sockets.push(socket);
     console.log(`Client id ${ID} connected to client on port ${port}`);
-    socket.on('data', (buffer) => {
-        console.log(`Client id ${ID} received message`);
-        console.log(buffer.toString());
-        handleMessage(buffer);
-        console.log(`Handled message from client id: ${buffer.id}`);
+    const stream = socket.pipe(split());
+    stream.on('data', (buffer) => {
+        const unTrimmedBuffer = buffer.toString('utf8')
+        console.log("untrimmed: ");
+        console.log(unTrimmedBuffer);
+        const trimmedBuffer = unTrimmedBuffer.trim()
+        console.log("Trimmed buffer:");
+        console.log(trimmedBuffer);
+        console.log("end")
+        if (trimmedBuffer) {
+            const message = JSON.parse(trimmedBuffer)
+            console.log(`Client id ${ID} received message from client id ${message.id}:`);
+            console.log(message);
+            console.log();
+            handleMessage(message);
+            console.log(`Handled message from client id: ${message.id}`);
+            console.log();
+        }
         // socket.end();
     })
 }
