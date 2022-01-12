@@ -6,14 +6,15 @@ const net = require("net");
 const {handleInsert, handleDelete} = require("./str");
 
 let client_data = {}
-let ID, PORT, IP, server;
+let ID, PORT, IP, server, servers_to_connect, clients_to_connect;
+let servers_connected = 0;
+let clients_connected = 0;
 let sockets = []
 let my_TS = 0;
 let retrying = false;
 let sentAll = false;
 let goodbyes = 0;
 let operation_history = []
-
 
 const start = async () => {
     const parsed = convert(process.argv[2])
@@ -24,27 +25,8 @@ const start = async () => {
 }
 
 start()
-    .then(async () => {
-            ID = client_data.id;
-            PORT = client_data.port;
-            IP = "127.0.0.1"
-            let init_data = {
-                id: ID,
-                TS: 0,
-                op: null
-            }
-            operation_history.push({
-                data: init_data,
-                replica: client_data.replica
-            })
-            server = startServer();
-            connectTo(client_data.other_clients, ID, sockets)
-            // mainLoop()
-            await sleep(10000);
-            // server.close(()=>  console.log("After close"));
-            // setTimeout(function () {
-            //     log() // logs out active handles that are keeping node running
-            // }, 100)
+    .then( () => {
+        console.log("DONE\nFinal Replica is:" + operation_history[operation_history.length-1].replica);
         }
     );
 
@@ -60,7 +42,6 @@ const mainLoop = async () => {
     const operations = client_data.operations
     await Promise.all(operations.map(((operation) => {
             doAndSend(operation)
-            console.log("sent an op");
         }
     )))
     console.log(operation_history);
@@ -133,7 +114,7 @@ const handleMessage = (message) => {
         closeIfEnded()
     } else
     {
-        applyOperation(message);
+        applyOperation(message.id, message.TS + 1, message.op);
         console.log("\nOperation history: ");
         console.log(operation_history);
         console.log("\n");
@@ -165,18 +146,23 @@ function applyAndPush(id, ts, operation) {
 }
 
 // operation {}
-const applyOperation = (data) => {
-    const op_TS = data.TS;
+const applyOperation = (id, ts, op) => {
+    const op_TS = ts;
     const my_TS = operation_history[operation_history.length - 1].data.TS;
-    if (my_TS < op_TS) {
-        return applyAndPush(data.id, op_TS, data.op);
+    if (my_TS < ts) {
+        return applyAndPush(id, ts, op);
     } else if (my_TS === op_TS) {
-        if (data.id > ID) {
-            return applyAndPush(data.id, op_TS, data.op);
+        console.log("SAME TS");
+        if (id > ID) {
+            return applyAndPush(id, ts, op);
         } else {
-            const lastOp = operation_history.pop();
-            applyAndPush(data.id, op_TS, data.op);
-            return applyAndPush(lastOp.id, lastOp.data.TS, lastOp.data.op);
+            // const lastOp = operation_history.pop();
+            // applyAndPush(data.id, op_TS, data.op);
+            // return applyAndPush(lastOp.data.id, lastOp.data.TS, lastOp.data.op);
+            const prevOp = operation_history.pop();
+            console.log("Popped id: " + prevOp.data.id);
+            applyOperation(id, ts, op);
+            return applyAndPush(prevOp.data.id, prevOp.data.TS, prevOp.data.op);
             // await applyOnLastString(operation)
             // return applyOnLastString(lastOp)
             // let prevString = operation_history[operation_history.length - 1].string
@@ -188,8 +174,9 @@ const applyOperation = (data) => {
     }
     else {
         const prevOp = operation_history.pop();
-        applyOperation(data);
-        return applyAndPush(prevOp.id, prevOp.data.TS, prevOp.data.op);
+        console.log("Popped id: " + prevOp.data.id);
+        applyOperation(id, ts, op);
+        return applyAndPush(prevOp.data.id, prevOp.data.TS, prevOp.data.op);
         // const tuple = await handleOperation(prevOp.name, prevOp.elements, newString)
         // operation_history.push(tuple)
         // return tuple.string
@@ -215,7 +202,12 @@ function sleep(ms) {
 const startServer = () => {
     return net.createServer()
         .listen(PORT, IP, 100)
-        .on('connection', socket => {
+        .on('connection', async (socket) => {
+            clients_connected++;
+            console.log("servers connected: " + servers_connected);
+            console.log("servers total: " + servers_to_connect.length);
+            console.log("clients connected: " + clients_connected);
+            console.log("clients total: " + clients_to_connect.length);
             console.log(`Server id: ${ID} received connection`);
             socket.setEncoding('utf8');
             sockets.push(socket);
@@ -239,6 +231,11 @@ const startServer = () => {
             socket.on('end', function () {
                 console.log('socket closing...')
             })
+
+            if ((clients_connected === clients_to_connect.length) && servers_connected === servers_to_connect.length) {
+                console.log("starting main");
+                await mainLoop();
+            }
         })
 }
 
@@ -246,11 +243,11 @@ const connectTo = (clients) => {
     clients.forEach(client => {
         if (client.id < ID)
             return;
-
         const port = client.port
         const ip = client.address
         connect(port, ip)
     })
+
 }
 
 
@@ -264,7 +261,8 @@ const connect = (port, ip) => {
     })
 }
 
-const connectEventHandler = (socket, port) => {
+const connectEventHandler = async (socket, port) => {
+    servers_connected++;
     socket.setEncoding('utf8');
     sockets.push(socket);
     console.log(`Client id ${ID} connected to client on port ${port}`);
