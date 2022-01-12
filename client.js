@@ -10,18 +10,37 @@ let ID, PORT, IP, server, servers_to_connect, clients_to_connect;
 let servers_connected = 0;
 let clients_connected = 0;
 let sockets = []
-let my_TS = 0;
 let retrying = false;
 let sentAll = false;
 let goodbyes = 0;
 let operation_history = []
 
 const start = async () => {
-    const parsed = convert(process.argv[2])
-        .then(res => {
-            client_data = res
-        });
-    await parsed;
+    client_data = await convert(process.argv[2]);
+    ID = client_data.id;
+    PORT = client_data.port;
+    servers_to_connect = client_data.other_clients.filter((client) => client.id > ID);
+    clients_to_connect = client_data.other_clients.filter((client) => client.id < ID);
+    console.log("servers_to_connect");
+    console.log(servers_to_connect);
+    console.log("clients_to_connect");
+    console.log(clients_to_connect);
+    console.log();
+    IP = "127.0.0.1"
+        let init_data = {
+            id: ID,
+            TS: 0,
+            op: null
+        }
+        operation_history.push({
+            data: init_data,
+            replica: client_data.replica
+        })
+    server = startServer();
+    await sleep(10000)
+    await connectTo(client_data.other_clients)
+    // await sleep(10000)
+    // await mainLoop();
 }
 
 start()
@@ -38,7 +57,6 @@ function closeIfEnded() {
 }
 
 const mainLoop = async () => {
-    // TODO: Promise.all.then => Goodbye
     const operations = client_data.operations
     await Promise.all(operations.map(((operation) => {
             doAndSend(operation)
@@ -54,22 +72,9 @@ const doAndSend = async (operation) => {
     await sleep(1000)
     const my_TS = operation_history[operation_history.length - 1].data.TS;
     const tuple = applyAndPush(ID, my_TS + 1, operation);
-    // const data = {
-    //     id: ID,
-    //     TS: my_TS + 1,
-    //     op: operation
-    // }
-    // // const message = await handleOperation(operation.name, operation.elements, string)
-    // // applyOnLastString(operation)
-    // const replica = applyOnLastString(operation)
-    // const tuple = {
-    //     data: data,
-    //     replica: replica
-    // }
-    // operation_history.push(tuple)
+
     sendUpdate(tuple.data)
     console.log(operation_history);
-    // return operation
 }
 
 const handleOperation = (name, elements, replica) => {
@@ -79,23 +84,6 @@ const handleOperation = (name, elements, replica) => {
         console.log(name);
         return handleInsert(replica, elements)
     }
-
-
-    // const my_TS = operation_history[operation_history.length - 1].data.TS + 1;
-    //
-    // const data = {
-    //     id: ID,
-    //     TS: my_TS,
-    //     op: {
-    //         name: name,
-    //         elements: elements
-    //     }
-    // }
-    // const tuple = {
-    //     data: data,
-    //     string: string
-    // }
-    // return tuple;
 }
 
 const sendUpdate = (message) => {
@@ -106,11 +94,8 @@ const sendUpdate = (message) => {
 }
 
 const handleMessage = (message) => {
-    // const message = JSON.parse(buffer);
     if (message.op === "Goodbye") {
         goodbyes++;
-        console.log("Received goodbye, total: " + goodbyes);
-        console.log("Need to receive " + client_data.other_clients.length);
         closeIfEnded()
     } else
     {
@@ -125,9 +110,6 @@ const applyOnLastString = (operation) => {
     let prevString = operation_history[operation_history.length - 1].replica
     console.log(operation);
     return handleOperation(operation.name, operation.elements, prevString)
-    // const tuple = handleOperation(operation.name, operation.elements, prevString)
-    // operation_history.push(tuple)
-    // return tuple.string;
 }
 
 function applyAndPush(id, ts, operation) {
@@ -171,8 +153,7 @@ const applyOperation = (id, ts, op) => {
             // const tuple1 = await handleOperation(lastOp.name, lastOp.elements, tuple.string)
             // operation_history.push(tuple1)
         }
-    }
-    else {
+    } else {
         const prevOp = operation_history.pop();
         console.log("Popped id: " + prevOp.data.id);
         applyOperation(id, ts, op);
@@ -192,7 +173,7 @@ const endSession = async () => {
     })
 }
 
-function sleep(ms) {
+const sleep = (ms) => {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
@@ -215,12 +196,11 @@ const startServer = () => {
             // socket.write(`Hello from server id: ${ID}`)
             stream.on('data',  (buffer) => {
                 const unTrimmedBuffer = buffer.toString('utf8')
-                console.log("untrimmed: ");
-                console.log(unTrimmedBuffer);
                 const trimmedBuffer = unTrimmedBuffer.trim()
                 if (trimmedBuffer) {
                     const message = JSON.parse(trimmedBuffer)
-                    console.log(`Server id: ${ID} received messagefrom client id ${message.id}:`);
+                    console.log(`Server id: ${ID} received message from client id ${message.id}:`);
+                    console.log("buffer: " + trimmedBuffer);
                     console.log(message);
                     console.log();
                     handleMessage(message)
@@ -269,23 +249,26 @@ const connectEventHandler = async (socket, port) => {
     const stream = socket.pipe(split());
     stream.on('data', (buffer) => {
         const unTrimmedBuffer = buffer.toString('utf8')
-        console.log("untrimmed: ");
-        console.log(unTrimmedBuffer);
         const trimmedBuffer = unTrimmedBuffer.trim()
-        console.log("Trimmed buffer:");
-        console.log(trimmedBuffer);
-        console.log("end")
         if (trimmedBuffer) {
             const message = JSON.parse(trimmedBuffer)
             console.log(`Client id ${ID} received message from client id ${message.id}:`);
+            console.log("buffer: " + trimmedBuffer);
             console.log(message);
             console.log();
             handleMessage(message);
-            console.log(`Handled message from client id: ${message.id}`);
-            console.log();
+            console.log(`Handled message from client id: ${message.id} \n`);
         }
         // socket.end();
     })
+    console.log("servers connected: " + servers_connected);
+    console.log("servers total: " + servers_to_connect.length);
+    console.log("clients connected: " + clients_connected);
+    console.log("clients total: " + clients_to_connect.length);
+    if((servers_connected === servers_to_connect.length) && clients_to_connect.length === clients_connected) {
+        console.log("before mainLoop");
+        await mainLoop()
+    }
 }
 
 const reconnectSocket = (socket, port, ip) => {
