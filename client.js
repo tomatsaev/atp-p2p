@@ -129,7 +129,7 @@ const applyOperationAndMerge = (id, ts, op) => {
     });
     // shifting a no longer needed operation in history
     const [, ...rest] = events_history;
-    if ((new Set(rest.map((e2) => e2.id).filter(id => id !== my_id)).size === client_data.other_clients.length)) {
+    if ((new Set(rest.map((e2) => e2.data.id).filter(id => id !== my_id)).size === client_data.other_clients.length)) {
         const event1 = events_history.shift();
         console.log(`Client ${my_id} removes operation <${JSON.stringify(event1.data.op)}, ${event1.data.ts}> from storage`);
     }
