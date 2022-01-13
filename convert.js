@@ -2,7 +2,7 @@
 const fs = require('fs');
 const readline = require('readline');
 
-function doConvert(file) {
+const doConvert = (file) => {
     return new Promise((resolve, reject) => {
         const stream = fs.createReadStream(file);
         // Handle stream error (IE: file not found)
@@ -24,7 +24,7 @@ function doConvert(file) {
         reader.on('close', () => resolve(array));
     });
 }
-async function convert(filename) {
+const convert = async (filename) => {
     return doConvert(filename)
         .then(res => {
             const client_data = {};
@@ -45,11 +45,11 @@ async function convert(filename) {
                 });
             }
             // parse actions info
-            client_data.actions = []
+            client_data.operations = []
             for(let i = second + 1; i < third; i++){
                 const data = res[i].split(' ');
                 const [head, ...rest] = data;
-                client_data.actions.push({
+                client_data.operations.push({
                     name: head,
                     elements: rest
                 });
