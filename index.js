@@ -1,27 +1,37 @@
-//
-// students = ["Tom", "Or"]
-//
-// function does(){
-//     for (const s of students) {
-//         something(s).then(() =>
-//             console.log(s + " then is async?"))
-//         console.log("I should be printed first")
+// class Event {
+//     constructor(data, org_replica, edited_replica) {
+//         this.data = data;
+//         this.org_replica = org_replica;
+//         this.edited_replica = edited_replica;
 //     }
 // }
 //
-// async function something(s){
-//     // return new Promise((r, e) => {
-//     await sleep(1000)
-//         console.log(s + " is async?");
-//     // })
+// class EventData {
+//     constructor(id, ts, op) {
+//         this.id = id;
+//         this.ts = ts;
+//         this.op = op;
+//     }
 // }
 //
-// does()
-//
-// function sleep(ms) {
-//     return new Promise(resolve => setTimeout(resolve, ms));
+// class Operation {
+//     constructor(name, elements) {
+//         this.name = name;
+//         this.elements = elements;
+//     }
 // }
-
-let s = "abc"
-s = s.slice(0, 1) + '1' + s.slice(1)
-console.log(s);
+//
+// const buffer = JSON.stringify({
+//     "data": {"id": "2", "ts": 1, "op": {"name": "insert", "elements": ["e"]}},
+//     "org_replica": "abc",
+//     "edited_replica": "eabc"
+// })
+// if (buffer) {
+//     const message = JSON.parse(buffer)
+//     console.log(message);
+//     e = new Event(new EventData(message.data.id, message.data.ts, new Operation(message.data.op.name, message.data.op.elements)), message.org_replica, message.edited_replica)
+//     console.log(e);
+// }
+let string = "dabc"
+let index = 3
+console.log(string.slice(index));
