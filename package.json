@@ -17,8 +17,10 @@
   },
   "homepage": "https://github.com/tomatsaev/atp-p2p#readme",
   "dependencies": {
-    "eslint": "^8.5.0",
     "split": "^1.0.1",
     "why-is-node-running": "^2.2.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.8.0"
   }
 }

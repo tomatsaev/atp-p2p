@@ -13,23 +13,23 @@ let inputFiles1 = [
     "input-file-8.txt",
     "input-file-9.txt",
     "input-file-10.txt",
-]
+];
 let inputFiles2 = [
     "input-file-11.txt",
     "input-file-12.txt"
-]
+];
 let inputFiles3 = [
     "input-file-31.txt",
     "input-file-32.txt",
     "input-file-33.txt"
-]
+];
 
 inputFiles1.map(fileName => {
-    const client = fork("client.js", [`inputs/${fileName}`])
+    const client = fork("client.js", [`inputs/${fileName}`]);
     clientsCounter++;
     client.on("message", message => finalReplicas.push(message));
     clients.push(client);
-})
+});
 
 clients.map(client =>
     client.on("close", code => {
@@ -37,7 +37,7 @@ clients.map(client =>
         if (clientsCounter === 0)
             checkReplicas();
     })
-)
+);
 
 const checkReplicas = () => {
     const result = finalReplicas.every((replica, index, arr) => replica === arr[0]);
@@ -47,6 +47,6 @@ const checkReplicas = () => {
         console.log("Not all replicas are equal, replicas:");
         finalReplicas.map((replica, id) =>
             console.log(`Client ${id}: ${replica}`)
-        )
+        );
     }
-}
+};
