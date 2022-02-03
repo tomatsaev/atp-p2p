@@ -30,15 +30,23 @@ class Operation {
 }
 
 class Event {
-    constructor(data, org_replica, edited_replica) {
+    constructor(data, replica) {
         this.data = data;
-        this.org_replica = org_replica;
-        this.edited_replica = edited_replica;
+        this.replica = replica;
     }
 }
 
 const start = async () => {
     client_data = await convert(process.argv[2]);
+    init(client_data);
+    server = startServer();
+    // await sleep(3000)
+    await connectTo(client_data.other_clients)
+}
+
+void start();
+
+const init = (client_data) => {
     my_id = client_data.id;
     my_port = client_data.port;
     curr_replica = client_data.replica;
@@ -48,21 +56,14 @@ const start = async () => {
     const init_data = new EventData(my_id, my_ts, null);
     const first_event = new Event(init_data, curr_replica, curr_replica);
     events_history.push(first_event)
-    server = startServer();
-    await sleep(10000)
-    await connectTo(client_data.other_clients)
 }
-
-start()
-    .then(() => {
-        }
-    );
 
 function closeIfEnded() {
     if ((goodbyes >= client_data.other_clients.length) && sentAll) {
         console.log(`Client ${my_id} is exiting`)
         closeConnection()
         console.log(`DONE\nFinal Replica is: ${curr_replica}`);
+        process.send(curr_replica);
     }
 }
 
@@ -113,10 +114,9 @@ const handleMessage = (message) => {
 
 function applyAndPush(id, ts, operation) {
     const data = new EventData(id, ts, operation)
-    const org_replica = curr_replica;
-    const edited_replica = handleOperation(operation.name, operation.elements, curr_replica)
-    curr_replica = edited_replica;
-    let event = new Event(data, org_replica, edited_replica)
+    const replica = handleOperation(operation.name, operation.elements, curr_replica)
+    curr_replica = replica;
+    let event = new Event(data, replica)
     events_history.push(event)
     return event;
 }
@@ -133,19 +133,15 @@ const applyOperationAndMerge = (id, ts, op) => {
     //     const event1 = events_history.shift();
     //     console.log(`Client ${my_id} removes operation <${JSON.stringify(event1.data.op)}, ${event1.data.ts}> from storage`);
     // }
+
     // rearrange history by ts and id. and operate
     console.log(`Client ${my_id} started merging, from ${my_ts} time stamp, on ${curr_replica}`);
     const index = events_history.indexOf(event);
-        if (index === 0)
-            curr_replica = events_history.length > 1 ? events_history[1].org_replica : curr_replica;
-        else
-            curr_replica = events_history[index - 1].edited_replica;
-
+    curr_replica = events_history[index - 1].replica;
     for (let event of events_history.slice(index)) {
-        event.org_replica = curr_replica;
         curr_replica = handleOperation(event.data.op.name, event.data.op.elements, curr_replica);
-        event.edited_replica = curr_replica;
-        console.log(`Operation <${JSON.stringify(event.data.op)}, ${event.data.ts}>, string: ${event.edited_replica}`);
+        event.replica = curr_replica;
+        console.log(`Operation <${JSON.stringify(event.data.op)}, ${event.data.ts}>, string: ${event.replica}`);
     }
     console.log(`Client ${my_id} ended merging with string ${curr_replica}, on timestamp ${my_ts}`);
     return event;
@@ -225,12 +221,9 @@ const connectEventHandler = async (socket, port) => {
         if (trimmedBuffer) {
             const message = JSON.parse(trimmedBuffer)
             let event_data = new EventData(message.id, message.ts, new Operation(message.op.name, message.op.elements));
-            // console.log("event_data:" + JSON.stringify(event_data.op));
-            // if(message.ts !== undefined)
             handleMessage(event_data)
             // console.log(`Handled message from client id: ${message.id} \n`);
         }
-        // socket.end();
     })
     if ((servers_connected === servers_to_connect.length) && clients_to_connect.length === clients_connected) {
         await mainLoop()
