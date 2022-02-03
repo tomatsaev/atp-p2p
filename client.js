@@ -114,7 +114,7 @@ const handleMessage = (message) => {
 function applyAndPush(id, ts, operation) {
     const data = new EventData(id, ts, operation)
     const org_replica = curr_replica;
-    const edited_replica = handleOperation(operation.name, operation.elements, org_replica)
+    const edited_replica = handleOperation(operation.name, operation.elements, curr_replica)
     curr_replica = edited_replica;
     let event = new Event(data, org_replica, edited_replica)
     events_history.push(event)
@@ -128,18 +128,18 @@ const applyOperationAndMerge = (id, ts, op) => {
         return ans === 0 ? firstEv.data.id - secondEv.data.id : ans;
     });
     // shifting a no longer needed operation in history
-    const [, ...rest] = events_history;
-    if ((new Set(rest.map((e2) => e2.data.id).filter(id => id !== my_id)).size === client_data.other_clients.length)) {
-        const event1 = events_history.shift();
-        console.log(`Client ${my_id} removes operation <${JSON.stringify(event1.data.op)}, ${event1.data.ts}> from storage`);
-    }
+    // const [, ...rest] = events_history;
+    // if ((new Set(rest.map((e2) => e2.data.id).filter(id => id !== my_id)).size === client_data.other_clients.length)) {
+    //     const event1 = events_history.shift();
+    //     console.log(`Client ${my_id} removes operation <${JSON.stringify(event1.data.op)}, ${event1.data.ts}> from storage`);
+    // }
     // rearrange history by ts and id. and operate
     console.log(`Client ${my_id} started merging, from ${my_ts} time stamp, on ${curr_replica}`);
     const index = events_history.indexOf(event);
-    if (index === 0)
-        curr_replica = events_history.length > 1 ? events_history[1].org_replica : curr_replica;
-    else
-        curr_replica = events_history[index - 1].edited_replica;
+        if (index === 0)
+            curr_replica = events_history.length > 1 ? events_history[1].org_replica : curr_replica;
+        else
+            curr_replica = events_history[index - 1].edited_replica;
 
     for (let event of events_history.slice(index)) {
         event.org_replica = curr_replica;
