@@ -1,11 +1,11 @@
-function handleDelete(string, index) {
+const handleDelete = (string, index) => {
     let local_index = index;
     const org_string = (" " + string).slice(1);
     let new_string = org_string.substr(0, local_index);
     local_index++;
     new_string = new_string + org_string.substr(local_index);
     return new_string;
-}
+};
 
 const handleInsert = (string, elements) => {
     let new_string;

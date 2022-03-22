@@ -3,22 +3,22 @@ const split = require("split");
 const net = require("net");
 const {handleInsert, handleDelete} = require("./str");
 
-let client_data = {};
-let my_id, my_port, my_ip, server, servers_to_connect, clients_to_connect;
-let my_ts = 0;
-let curr_replica;
-let servers_connected = 0;
-let clients_connected = 0;
+let clientData = {};
+let myId, myPort, myIP, server, serversToConnect, clientsToConnect;
+let myTS = 0;
+let currentReplica;
+let connectedServersCount = 0;
+let connectedClientsCount = 0;
 let sockets = [];
-let sentAll = false;
-let goodbyes = 0;
-let events_history = [];
+let hasSentAll = false;
+let goodbyesCount = 0;
+let eventsHistory = [];
 
 class EventData {
-    constructor(id, ts, op) {
+    constructor(id, timeStamp, operation) {
         this.id = id;
-        this.ts = ts;
-        this.op = op;
+        this.timeStamp = timeStamp;
+        this.operation = operation;
     }
 }
 
@@ -37,53 +37,52 @@ class Event {
 }
 
 const start = async () => {
-    client_data = await convert(process.argv[2]);
-    init(client_data);
+    clientData = await convert(process.argv[2]);
+    init(clientData);
     server = startServer();
-    // await sleep(3000)
-    await connectTo(client_data.other_clients);
+    await connectTo(clientData.otherClients);
 };
 
 void start();
 
-const init = (client_data) => {
-    my_id = client_data.id;
-    my_port = client_data.port;
-    curr_replica = client_data.replica;
-    servers_to_connect = client_data.other_clients.filter((client) => client.id > my_id);
-    clients_to_connect = client_data.other_clients.filter((client) => client.id < my_id);
-    my_ip = "127.0.0.1";
-    const init_data = new EventData(my_id, my_ts, null);
-    const first_event = new Event(init_data, curr_replica, curr_replica);
-    events_history.push(first_event);
+const init = (data) => {
+    myId = data.id;
+    myPort = data.port;
+    currentReplica = data.replica;
+    serversToConnect = data.otherClients.filter((client) => client.id > myId);
+    clientsToConnect = data.otherClients.filter((client) => client.id < myId);
+    myIP = "127.0.0.1";
+    const initData = new EventData(myId, myTS, null);
+    const firstEvent = new Event(initData, currentReplica);
+    eventsHistory.push(firstEvent);
 };
 
 function closeIfEnded() {
-    if ((goodbyes >= client_data.other_clients.length) && sentAll) {
-        console.log(`Client ${my_id} is exiting`);
+    if ((goodbyesCount >= clientData.otherClients.length) && hasSentAll) {
+        console.log(`Client ${myId} is exiting`);
         closeConnection();
-        console.log(`DONE\nFinal Replica is: ${curr_replica}`);
-        process.send(curr_replica);
+        console.log(`DONE\nFinal Replica is: ${currentReplica}`);
+        process.send(currentReplica);
     }
 }
 
 const mainLoop = async () => {
-    const operations = client_data.operations;
+    const operations = clientData.operations;
     await Promise.all(operations.map(((operation) => {
-        const operation_ob = new Operation(operation.name, operation.elements);
-        doAndSend(operation_ob);
+        // const newOperation = new Operation(operation.name, operation.elements);
+        doAndSend(operation);
     }
     )));
-    console.log(`Client ${my_id} finished his local string modifications`);
-    sentAll = true;
+    console.log(`Client ${myId} finished his local string modifications`);
+    hasSentAll = true;
     await endSession();
     closeIfEnded();
 };
 
 const doAndSend = async (operation) => {
     await sleep(1000);
-    my_ts++;
-    let event = applyOperationAndMerge(my_id, my_ts, operation);
+    myTS++;
+    let event = applyOperationAndMerge(myId, myTS, operation);
     sendUpdate(event.data);
 };
 
@@ -102,55 +101,51 @@ const sendUpdate = (message) => {
 };
 
 const handleMessage = (message) => {
-    if (message.op.name === "Goodbye") {
-        goodbyes++;
+    if (message.operation.name === "Goodbye") {
+        goodbyesCount++;
         closeIfEnded();
     } else {
-        console.log(`Client ${my_id} received an update operation <${JSON.stringify(message.op)}, ${message.ts}> from client ${message.id}`);
-        my_ts = Math.max(my_ts, message.ts) + 1;
-        applyOperationAndMerge(message.id, message.ts, message.op);
+        console.log(`Client ${myId} received an update operation <${JSON.stringify(message.operation)}, ${message.timeStamp}> from client ${message.id}`);
+        myTS = Math.max(myTS, message.timeStamp) + 1;
+        applyOperationAndMerge(message.id, message.timeStamp, message.operation);
     }
 };
 
-function applyAndPush(id, ts, operation) {
-    const data = new EventData(id, ts, operation);
-    const replica = handleOperation(operation.name, operation.elements, curr_replica);
-    curr_replica = replica;
+function applyAndPush(id, timeStamp, operation) {
+    const data = new EventData(id, timeStamp, operation);
+    const replica = handleOperation(operation.name, operation.elements, currentReplica);
+    currentReplica = replica;
     let event = new Event(data, replica);
-    events_history.push(event);
+    eventsHistory.push(event);
     return event;
 }
 
-const applyOperationAndMerge = (id, ts, op) => {
-    let event = applyAndPush(id, ts, op);
-    events_history.sort((firstEv, secondEv) => { // sort history by ts
-        const ans = firstEv.data.ts - secondEv.data.ts;
-        return ans === 0 ? firstEv.data.id - secondEv.data.id : ans;
+const applyOperationAndMerge = (id, timeStamp, operation) => {
+    let event = applyAndPush(id, timeStamp, operation);
+    // sort history by timeStamp
+    eventsHistory.sort((firstEvent, secondEvent) => {
+        const ans = firstEvent.data.timeStamp - secondEvent.data.timeStamp;
+        return ans === 0 ? firstEvent.data.id - secondEvent.data.id : ans;
     });
-    // shifting a no longer needed operation in history
-    // const [, ...rest] = events_history;
-    // if ((new Set(rest.map((e2) => e2.data.id).filter(id => id !== my_id)).size === client_data.other_clients.length)) {
-    //     const event1 = events_history.shift();
-    //     console.log(`Client ${my_id} removes operation <${JSON.stringify(event1.data.op)}, ${event1.data.ts}> from storage`);
-    // }
 
-    // rearrange history by ts and id. and operate
-    console.log(`Client ${my_id} started merging, from ${my_ts} time stamp, on ${curr_replica}`);
-    const index = events_history.indexOf(event);
-    curr_replica = events_history[index - 1].replica;
-    for (let event of events_history.slice(index)) {
-        curr_replica = handleOperation(event.data.op.name, event.data.op.elements, curr_replica);
-        event.replica = curr_replica;
-        console.log(`Operation <${JSON.stringify(event.data.op)}, ${event.data.ts}>, string: ${event.replica}`);
+    // rearrange history by timeStamp and id, re-applying operations
+    console.log(`Client ${myId} started merging, from ${myTS} time stamp, on ${currentReplica}`);
+    const index = eventsHistory.indexOf(event);
+    currentReplica = eventsHistory[index - 1].replica;
+    for (let event of eventsHistory.slice(index)) {
+        currentReplica = handleOperation(event.data.operation.name, event.data.operation.elements, currentReplica);
+        event.replica = currentReplica;
+        console.log(`Operation <${JSON.stringify(event.data.operation)}, ${event.data.timeStamp}>, string: ${event.replica}`);
     }
-    console.log(`Client ${my_id} ended merging with string ${curr_replica}, on timestamp ${my_ts}`);
+    console.log(`Client ${myId} ended merging with string ${currentReplica}, on timestamp ${myTS}`);
     return event;
 };
 
 const endSession = async () => {
+    //TODO
     await sleep(1000);
-    const bye_event_data = new EventData(my_id, my_ts, new Operation("Goodbye", []));
-    sendUpdate(bye_event_data);
+    const eventData = new EventData(myId, myTS, new Operation("Goodbye", []));
+    sendUpdate(eventData);
 };
 
 const sleep = (ms) => {
@@ -162,27 +157,25 @@ const sleep = (ms) => {
 
 const startServer = () => {
     return net.createServer()
-        .listen(my_port, my_ip, 100)
+        .listen(myPort, myIP, 100)
         .on("connection", async (socket) => {
-            clients_connected++;
-            console.log(`Server id: ${my_id} received connection`);
+            connectedClientsCount++;
+            console.log(`Server id: ${myId} received connection`);
             socket.setEncoding("utf8");
             sockets.push(socket);
             const stream = socket.pipe(split());
             stream.on("data", (buffer) => {
-                const unTrimmedBuffer = buffer.toString("utf8");
-                const trimmedBuffer = unTrimmedBuffer.trim();
+                const trimmedBuffer = buffer.toString("utf8").trim();
                 if (trimmedBuffer) {
                     const message = JSON.parse(trimmedBuffer);
-                    let event_data = new EventData(message.id, message.ts, new Operation(message.op.name, message.op.elements));
-                    handleMessage(event_data);
+                    let eventData = new EventData(message.id, message.timeStamp, new Operation(message.operation.name, message.operation.elements));
+                    handleMessage(eventData);
                 }
             });
             socket.on("end", function () {
                 console.log("socket closing...");
             });
-
-            if ((clients_connected === clients_to_connect.length) && servers_connected === servers_to_connect.length) {
+            if ((connectedClientsCount === clientsToConnect.length) && connectedServersCount === serversToConnect.length) {
                 await mainLoop();
             }
         });
@@ -190,19 +183,18 @@ const startServer = () => {
 
 const connectTo = (clients) => {
     clients.forEach(client => {
-        if (client.id < my_id)
+        if (client.id < myId)
             return;
         const port = client.port;
         const ip = client.address;
         connect(port, ip);
     });
-
 };
 
 
 const connect = (port, ip) => {
     const socket = new net.Socket();
-    setTimeout(() => connectSocket(socket, port, ip), 5000);
+    setTimeout(() => socket.connect(port, ip), 1000);
     socket.on("connect", () => connectEventHandler(socket, port));
     socket.on("end", function () {
         console.log("socket closing...");
@@ -210,32 +202,26 @@ const connect = (port, ip) => {
 };
 
 const connectEventHandler = async (socket, port) => {
-    servers_connected++;
+    connectedServersCount++;
     socket.setEncoding("utf8");
     sockets.push(socket);
-    console.log(`Client id ${my_id} connected to client on port ${port}`);
+    console.log(`Client id ${myId} connected to client on port ${port}`);
     const stream = socket.pipe(split());
     stream.on("data", (buffer) => {
-        const unTrimmedBuffer = buffer.toString("utf8");
-        const trimmedBuffer = unTrimmedBuffer.trim();
+        const trimmedBuffer = buffer.toString("utf8").trim();
         if (trimmedBuffer) {
             const message = JSON.parse(trimmedBuffer);
-            let event_data = new EventData(message.id, message.ts, new Operation(message.op.name, message.op.elements));
-            handleMessage(event_data);
-            // console.log(`Handled message from client id: ${message.id} \n`);
+            let eventData = new EventData(message.id, message.timeStamp, new Operation(message.operation.name, message.operation.elements));
+            handleMessage(eventData);
         }
     });
-    if ((servers_connected === servers_to_connect.length) && clients_to_connect.length === clients_connected) {
+    if ((connectedServersCount === serversToConnect.length) && clientsToConnect.length === connectedClientsCount) {
         await mainLoop();
     }
-};
-
-const connectSocket = (socket, port, ip) => {
-    socket.connect(port, ip, () => {
-    });
 };
 
 const closeConnection = () => {
     server.close();
     sockets.forEach(socket => socket.end());
 };
+

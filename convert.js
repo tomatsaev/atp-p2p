@@ -1,97 +1,59 @@
-
 const fs = require("fs");
 const readline = require("readline");
+const events = require("events");
 
-const doConvert = (file) => {
-    return new Promise((resolve, reject) => {
-        const stream = fs.createReadStream(file);
-        // Handle stream error (IE: file not found)
-        stream.on("error", reject);
+class Operation {
+    constructor(name, elements) {
+        this.name = name;
+        this.elements = elements;
+    }
+}
 
-        const reader = readline.createInterface({
-            input: stream
-        });
-
-        const array = [];
-
-        reader.on("line", line => {
-            if(line === "")
-                array.push("\n");
-            else
-                array.push(line);
-        });
-
-        reader.on("close", () => resolve(array));
+const convert = async (file) => {
+    const stream = fs.createReadStream(file);
+    const reader = readline.createInterface({
+        input: stream
     });
+    let array = [];
+    reader.on("line", line => {
+        if(line === "")
+            array.push("\n");
+        else
+            array.push(line);
+    });
+    await events.once(reader, "close");
+    return extractData(array);
 };
-const convert = async (filename) => {
-    return doConvert(filename)
-        .then(res => {
-            const client_data = {};
-            const first = res.indexOf("\n");
-            const second = res.indexOf("\n", first+1);
-            const third = res.indexOf("\n", second+1);
-            client_data.id = res[0];
-            client_data.port = res[1];
-            client_data.replica = res[2];
-            // parse other clients info
-            client_data.other_clients = [];
-            for (let i = first + 1; i < second; i++) {
-                const data = res[i].split(" ");
-                client_data.other_clients.push({
-                    id: data[0],
-                    address: data[1],
-                    port: data[2]
-                });
-            }
-            // parse actions info
-            client_data.operations = [];
-            for(let i = second + 1; i < third; i++){
-                const data = res[i].split(" ");
-                const [head, ...rest] = data;
-                client_data.operations.push({
-                    name: head,
-                    elements: rest
-                });
-            }
-            // console.log(client_data)
-            // console.log(res);
-            return client_data;
-        }).catch(err => console.error(err));
+const extractData = (result) => {
+    const clientData = {};
+    const first = result.indexOf("\n");
+    const second = result.indexOf("\n", first + 1);
+    let third = result.length;
+    while (result[third -1] === "\n") {
+        third--;
+    }
+    clientData.id = result[0];
+    clientData.port = result[1];
+    clientData.replica = result[2];
+    // parse other clients
+    clientData.otherClients = [];
+    for (let i = first + 1; i < second; i++) {
+        const data = result[i].split(" ");
+        clientData.otherClients.push({
+            id: data[0],
+            address: data[1],
+            port: data[2]
+        });
+    }
+    // parse actions
+    clientData.operations = [];
+    for(let i = second + 1; i < third; i++){
+        const data = result[i].split(" ");
+        const [head, ...rest] = data;
+        clientData.operations.push(
+            new Operation(head, rest));
+    }
+    return clientData;
 };
 
 module.exports =  {convert};
-
-
-//         const first = res.indexOf('\n')
-//         const second = res.indexOf('\n', first+1)
-//         const third = res.indexOf('\n', second+1)
-//         client_data.id = res[0]
-//         client_data.port = res[1]
-//         client_data.replica = res[2]
-//         // parse other clients info
-//         client_data.other_clients = [];
-//         for (let i = first + 1; i < second; i++) {
-//             const data = res[i].split(' ');
-//             client_data.other_clients.push({
-//                 id: data[0],
-//                 address: data[1],
-//                 port: data[2]
-//             })
-//         }
-//         // parse actions info
-//         client_data.actions = []
-//         for(let i = second + 1; i < third; i++){
-//             const data = res[i].split(' ')
-//             const [head, ...rest] = data;
-//             client_data.actions.push({
-//                 name: head,
-//                 elements: rest
-//             })
-//         }
-//         console.log(client_data)
-//         console.log(res);
-//
-//     }).catch(err => console.error(err));
-
-
